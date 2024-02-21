@@ -18,8 +18,3 @@ Interesting things to do/add to the model:
   * Implement the few-shot approach (as in Wölflein and Arandjelović, resource #3) to the Masouris model (resource #1)
      - This is probably more challenging than it appears, but possibly a type of transfer learning can be employed. Something like using the trained ResNeXt model of Masouris, but re-training only the layers that notice the chess pieces with the few-shot approach of showing it 2/3 images of the unseen board.
   * If actually adding to the model fails: try to investigate what each layer learns to detect (and maybe why?)
-
-
-Output:
--------
-A code that works
