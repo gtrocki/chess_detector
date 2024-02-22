@@ -10,6 +10,7 @@ Possible resources:
 1. Repository of Masouris code: https://github.com/ThanosM97/end-to-end-chess-recognition
 2. Dataset corresponding to the Masouris repository (chessReD): https://data.4tu.nl/datasets/99b5c721-280b-450b-b058-b2900b69a90f/2
 3. trained ChessCog model: https://github.com/georg-wolflein/chesscog
+4. DINO DETR with pretrained checkpoints: https://github.com/IDEA-Research/DINO
 
 Interesting things to do/add to the model:
 ------------------------------------------
