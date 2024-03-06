@@ -21,16 +21,18 @@ class PnoP(nn.Module):
     self.padding = padding
 
     self.model = nn.Sequential(
-      nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3),
+      nn.Conv2d(3, 4, kernel_size=7, stride=2, padding=3),
       nn.ReLU(inplace=True),
-      nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2),
+      nn.Conv2d(4, 8, kernel_size=5, stride=2, padding=2),
       nn.ReLU(inplace=True),
-      nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+      nn.Conv2d(8, 16, kernel_size=3, stride=2, padding=1),
       nn.ReLU(inplace=True),
-      nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-      nn.ReLU(inplace=True),
+      nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
+      nn.ReLU(inplace=True), #up to this step the shape should be (batch,16,64,64)
+      nn.MaxPool2d(kernel_size=8, stride=8,padding=1), #shape (batch,16,8,8)
       
-      )   
+      )
+    self.linear = nn.Linear(16*8*8,2,bias=True)
     
     def forward(self, x):
         """ Apply the forward pass of the network.
@@ -42,8 +44,12 @@ class PnoP(nn.Module):
         Returns:
         class : piece or no piece.
         
-        """    
-        y = self.model(x)
+        """  
+        batch_size = x.shape[0]  
+        Feature_maps = self.model(x)
+        Feature_maps_vector = Feature_maps.view(batch_size, -1)
+        y = self.linear(Feature_maps_vector)
+        y = nn.Softmax(dim=1)
         return y
     
 
