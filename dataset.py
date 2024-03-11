@@ -18,7 +18,7 @@ class ChessRecognitionDataset(Dataset):
 
     def __init__(self,
                  dataroot: Union[str, Path],
-                 split: str,
+                 split: Union[str, None] = None,
                  transform: Union[Callable, None] = None) -> None:
         """Initialize a ChessRecognitionDataset.
 
@@ -54,21 +54,25 @@ class ChessRecognitionDataset(Dataset):
             index=None)
 
         # Get split info
-        self.length = annotations_file['splits'][split]['n_samples']
-        self.split_img_ids = annotations_file['splits'][split]['image_ids']
+        if self.split:
+            self.length = annotations_file['splits'][split]['n_samples']
+            self.split_img_ids = annotations_file['splits'][split]['image_ids']
+        else:
+            self.length = len(self.annotations)
 
         # Keep only the split's data
-        self.annotations = self.annotations[self.annotations["image_id"].isin(
-            self.split_img_ids)]
-        self.images = self.images[self.images['id'].isin(self.split_img_ids)]
+        if self.split:
+            self.annotations = self.annotations[self.annotations["image_id"].isin(
+                self.split_img_ids)]
+            self.images = self.images[self.images['id'].isin(self.split_img_ids)]
 
-        assert (self.length == len(self.split_img_ids) and
-                self.length == len(self.images)), (
-            f"The numeber of images in "
-            f"the dataset ({len(self.images)}) for split:{self.split}, does "
-            f"not match neither the length specified in the annotations "
-            f"({self.length}) or the length of the list of ids for the split "
-            f"{len(self.split_img_ids)}")
+            assert (self.length == len(self.split_img_ids) and
+                    self.length == len(self.images)), (
+                f"The numeber of images in "
+                f"the dataset ({len(self.images)}) for split:{self.split}, does "
+                f"not match neither the length specified in the annotations "
+                f"({self.length}) or the length of the list of ids for the split "
+                f"{len(self.split_img_ids)}")
 
     def __len__(self) -> int:
         """Return the length of the dataset."""
