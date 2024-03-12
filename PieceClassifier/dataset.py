@@ -17,7 +17,7 @@ class SamDataset(Dataset):
                                 * 'pnp' - piece/not-a-piece classifier **NOT YET IMPLEMENTED**
                                 * 'bw' (default) - black/white classifier
                                 * 'pt' - Piece type classifier
-                                * 'loc' - chessboard location classifier **NOT YET IMPLEMENTED**
+                                * 'loc' - chessboard location classifier
         split (str): requested split of the data.
                             Available optins are: 'train', 'val', 'test'
         withbbox (bool): If True - use only images with bounding boxes from the 'chessred2k' section of the dataset
@@ -114,6 +114,9 @@ class SamDataset(Dataset):
             data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
         elif self.classifier.lower() in ['p','pt']:
             label = piece_category.split('-')[-1] # 2nd part of the category is the piece type
+            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+        elif self.classifier.lower() in ['loc','locator']:
+            label = self.annotations.iloc[index]['chessboard_position']
             data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
         else:
             raise(NotImplementedError(f"Classifier '{self.classifier}' not implemented"))
