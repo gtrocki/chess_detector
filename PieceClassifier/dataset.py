@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from segment_anything import sam_model_registry, SamPredictor # import relevant parts of the SAM model
 
 class SamDataset(Dataset):
-    def __init__(self, dataroot='chessReD', classifier='bw', split='train', imres=[1024,1024], withbbox=True):
+    def __init__(self, dataroot='chessReD', classifier='bw', crop=True, split='train', imres=[1024,1024], withbbox=True):
         '''
         dataroot (str): path to the location of dataset. Defaults to './chessReD'.
         classifier (str): data classifier that will use the dataset. 
@@ -25,10 +25,12 @@ class SamDataset(Dataset):
         As of now, the dataset returns a path to the image and the binding box of the piece. 
         It might be usefull (though possibly not required) to have it return the segmented piece itself.
         '''
+        super().__init__()
         self.dataroot = dataroot
         self.classifier = classifier
         self.split = split
         self.imres = imres
+        self.crop = crop
 
         data_path=Path(dataroot, 'annotations.json')
         if not data_path.is_file():
@@ -56,16 +58,16 @@ class SamDataset(Dataset):
 
         # Filter data tables to keep only relevant parts
         self.annotations = self.annotations[self.annotations["image_id"].isin(self.split_img_ids)]
-
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu' # set the device according to availability
         
-        sam_checkpoint = Path('/work/amirkl/DL4CV/segment-anything', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
-        model_type = 'vit_h'
+        if not self.crop:
+            sam_checkpoint = Path('/work/amirkl/DL4CV/segment-anything', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
+            model_type = 'vit_h'
         
-        self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint) # create SAM model
-        self.sam.to(self.device) # move SAM to device
+            self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint) # create SAM model
+            self.sam.to(self.device) # move SAM to device
         
-        self.predictor = SamPredictor(self.sam) # create SAM predictor
+            self.predictor = SamPredictor(self.sam) # create SAM predictor
 
     def _bbox_transform(self, bbox, original_resolution):
         # utility function for transforming box coordinates in (x,y,w,h) to (x1,y1,x2,y2)
@@ -96,28 +98,34 @@ class SamDataset(Dataset):
         # Transform the bbox to match SAMs requirements
         bbox = self.annotations.iloc[index]['bbox']
         bbox = torch.tensor(self._bbox_transform(bbox, original_resolution)).to(self.device)
-        input_box = self.predictor.transform.apply_boxes_torch(bbox, image.shape[:2])
-
-        # Load the image to SAM and predict segment
-        self.predictor.set_image(image)
-        masks, scores, logits = self.predictor.predict_torch(
-            point_coords=None,
-            point_labels=None,
-            boxes=input_box,
-            multimask_output=False,
-        )
-
+        
+        if self.crop:
+            x = bbox.int()
+            data = cv2.resize(image[x[1]:x[3],x[0]:x[2]], [256,256]) #get the crop of the image and resize to fit into resnet
+        else:
+            input_box = self.predictor.transform.apply_boxes_torch(bbox, image.shape[:2])
+    
+            # Load the image to SAM and predict segment
+            self.predictor.set_image(image)
+            masks, scores, logits = self.predictor.predict_torch(
+                point_coords=None,
+                point_labels=None,
+                boxes=input_box,
+                multimask_output=False,
+            )
+            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+    
         # get piece category
         piece_category = self.categories.iloc[self.annotations.iloc[index]['category_id']]['name']
         if self.classifier.lower() in ['bw']:
-            label = piece_category.split('-')[0] # 1st parth of the category is the color
-            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+            encoding = {'black':0,'white':1}
+            label = encoding[piece_category.split('-')[0]] # 1st parth of the category is the color
         elif self.classifier.lower() in ['p','pt']:
-            label = piece_category.split('-')[-1] # 2nd part of the category is the piece type
-            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+            encoding = {'pawn':0, 'rook':1, 'knight':2, 'bishop':3, 'queen':4, 'king':5, 'empty':6}
+            label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type
         elif self.classifier.lower() in ['loc','locator']:
-            label = self.annotations.iloc[index]['chessboard_position']
-            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+            label = self.annotations.iloc[index]['chessboard_position'] # get the piece location
+            ### Add implementation for translating location to number for learning...
         else:
             raise(NotImplementedError(f"Classifier '{self.classifier}' not implemented"))
 
