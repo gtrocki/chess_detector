@@ -46,4 +46,5 @@ class AlexNetPieceClassifier(nn.Module):
         return x
 
 class PretrainedAlexNetPieceClassifier(nn.Module):
+    #Possibly there's some meaning to making a class for a pretrained model, but for now it's all in the jupyter notebook
     pass
