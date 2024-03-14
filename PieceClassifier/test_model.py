@@ -1,5 +1,5 @@
 import torch
-# from torchvision import models
+from torchvision import models
 from torch import nn
 
 ############################
@@ -32,3 +32,18 @@ class PieceClassifier(nn.Module):
         y = self.linear(Feature_maps_vector)
         y = self.softmax(y)
         return y
+
+class AlexNetPieceClassifier(nn.Module):
+    def __init__(self, num_classes=6):
+        super().__init__()
+        self.model = models.resnet18(num_classes=num_classes)
+        self.softmax = nn.Softmax(dim=1)
+
+        
+    def forward(self, x):
+        x = self.model(x)
+        x = self.softmax(x)
+        return x
+
+class PretrainedAlexNetPieceClassifier(nn.Module):
+    pass
