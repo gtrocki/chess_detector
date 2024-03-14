@@ -92,8 +92,12 @@ class SamDataset(Dataset):
         image_path = str(Path(self.dataroot, self.images.iloc[self.annotations.iloc[index]['image_id']]['path']))
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        original_resolution = image.shape[:2]
-        image = cv2.resize(image, self.imres)
+        
+        if not self.crop:
+            original_resolution = image.shape[:2]
+            image = cv2.resize(image, self.imres)
+        else:
+            original_resolution = self.imres #this makes sure that no reshape is performed when you use the crops only. not sure that this is the best way...
 
         # Transform the bbox to match SAMs requirements
         bbox = self.annotations.iloc[index]['bbox']
