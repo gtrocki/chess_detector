@@ -110,7 +110,6 @@ class SamDataset(Dataset):
         if self.crop:
             x = bbox.int()
             y = cv2.resize(image[x[1]:x[3],x[0]:x[2]], [256,256]) #get the crop of the image and resize to fit into resnet
-            print(image.shape)
             data = {'image':image,'bb':x,'out':y}
 
             
@@ -125,17 +124,35 @@ class SamDataset(Dataset):
                 boxes=input_box,
                 multimask_output=False,
             )
+
+            """
             binary_tensor = masks.to(torch.uint8)
             x = bbox.int()
             h, w = binary_tensor.shape[-2:]
             binary_tensor = binary_tensor.reshape(h, w, 1)
-            MaskedImage = binary_tensor*image
+            MaskedImage = binary_tensor*image"""
+            #MaskedImage = image[masks]
+            #x = bbox.int()
+            x = bbox.int()
+            imageTensor = torch.tensor(image)
+            h, w = masks.shape[-2:]
+            masks = masks.reshape(h, w, 1)
+            
+            MaskedImage = imageTensor*masks
+
+            invertedMask = ~masks
+            invertedMask = torch.cat((invertedMask,invertedMask,invertedMask),dim=2)
+            newBackgroundvalue = 128
+            
+            MaskedImage[invertedMask] = newBackgroundvalue
+            
             Cropped_masks = MaskedImage[x[1]:x[3],x[0]:x[2]]
             
             #resize the cropped image
             tensor_np = Cropped_masks.numpy()
             resized_image = cv2.resize(tensor_np, (256, 256)) 
             data = torch.tensor(resized_image)
+            
 
 
     
