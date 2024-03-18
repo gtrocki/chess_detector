@@ -134,9 +134,9 @@ class SamDataset(Dataset):
             #MaskedImage = image[masks]
             #x = bbox.int()
             x = bbox.int()
-            imageTensor = torch.tensor(image)
+            imageTensor = torch.tensor(image).to(self.device)
             h, w = masks.shape[-2:]
-            masks = masks.reshape(h, w, 1)
+            masks = masks.reshape(h, w, 1).to(self.device)
             
             MaskedImage = imageTensor*masks
 
@@ -149,7 +149,7 @@ class SamDataset(Dataset):
             Cropped_masks = MaskedImage[x[1]:x[3],x[0]:x[2]]
             
             #resize the cropped image
-            tensor_np = Cropped_masks.numpy()
+            tensor_np = Cropped_masks.detach().cpu().numpy()
             resized_image = cv2.resize(tensor_np, (256, 256)) 
             data = torch.tensor(resized_image)
             
