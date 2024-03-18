@@ -63,7 +63,7 @@ class SamDataset(Dataset):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu' # set the device according to availability
         
         #Load SAM for both crop=true and crop=false
-        sam_checkpoint = Path('C:\Tomer\Courses\Deep Learning\project with sam\segmentAnything', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
+        sam_checkpoint = Path('C:', '\\', 'Users', 'michalro', 'chess_detector', 'checkpoint_sam', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
         model_type = 'vit_h'
     
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint) # create SAM model
