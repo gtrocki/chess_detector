@@ -3,10 +3,11 @@ import json
 import torch
 import numpy as np
 import pandas as pd
+import torch.nn.functional as F
 from pathlib import Path
 from torch.utils.data import Dataset
 from segment_anything import sam_model_registry, SamPredictor # import relevant parts of the SAM model
-
+#import matplotlib.pyplot as plt
 class SamDataset(Dataset):
     def __init__(self, dataroot='chessReD', classifier='bw', crop=True, split='train', imres=[1024,1024], withbbox=True):
         '''
@@ -18,7 +19,7 @@ class SamDataset(Dataset):
                                 * 'bw' (default) - black/white classifier
                                 * 'pt' - Piece type classifier
                                 * 'loc' - chessboard location classifier
-                                * 'pb' - Pawn binary clasification
+                                * 'pb' - Pawn binary classification
         split (str): requested split of the data.
                             Available optins are: 'train', 'val', 'test'
         withbbox (bool): If True - use only images with bounding boxes from the 'chessred2k' section of the dataset
@@ -61,14 +62,14 @@ class SamDataset(Dataset):
         self.annotations = self.annotations[self.annotations["image_id"].isin(self.split_img_ids)]
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu' # set the device according to availability
         
-        if not self.crop:
-            sam_checkpoint = Path('C:', '\\', 'Users', 'michalro', 'chess_detector', 'checkpoint_sam', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
-            model_type = 'vit_h'
-        
-            self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint) # create SAM model
-            self.sam.to(self.device) # move SAM to device
-        
-            self.predictor = SamPredictor(self.sam) # create SAM predictor
+        #Load SAM for both crop=true and crop=false
+        sam_checkpoint = Path('C:', '\\', 'Users', 'michalro', 'chess_detector', 'checkpoint_sam', 'sam_vit_h_4b8939.pth') #Check that the checkpoint path suits the computer you are on
+        model_type = 'vit_h'
+    
+        self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint) # create SAM model
+        self.sam.to(self.device) # move SAM to device
+    
+        self.predictor = SamPredictor(self.sam) # create SAM predictor
 
     def _bbox_transform(self, bbox, original_resolution):
         # utility function for transforming box coordinates in (x,y,w,h) to (x1,y1,x2,y2)
@@ -94,6 +95,8 @@ class SamDataset(Dataset):
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
+        
+
         if not self.crop:
             original_resolution = image.shape[:2]
             image = cv2.resize(image, self.imres)
@@ -106,7 +109,10 @@ class SamDataset(Dataset):
         
         if self.crop:
             x = bbox.int()
-            data = cv2.resize(image[x[1]:x[3],x[0]:x[2]], [256,256]) #get the crop of the image and resize to fit into resnet
+            y = cv2.resize(image[x[1]:x[3],x[0]:x[2]], [256,256]) #get the crop of the image and resize to fit into resnet
+            data = {'image':image,'bb':x,'out':y}
+
+            
         else:
             input_box = self.predictor.transform.apply_boxes_torch(bbox, image.shape[:2])
     
@@ -118,19 +124,49 @@ class SamDataset(Dataset):
                 boxes=input_box,
                 multimask_output=False,
             )
-            data = {'masks':masks, 'image_path':image_path, 'bbox':bbox}
+
+            """
+            binary_tensor = masks.to(torch.uint8)
+            x = bbox.int()
+            h, w = binary_tensor.shape[-2:]
+            binary_tensor = binary_tensor.reshape(h, w, 1)
+            MaskedImage = binary_tensor*image"""
+            #MaskedImage = image[masks]
+            #x = bbox.int()
+            x = bbox.int()
+            imageTensor = torch.tensor(image).to(self.device)
+            h, w = masks.shape[-2:]
+            masks = masks.reshape(h, w, 1).to(self.device)
+            
+            MaskedImage = imageTensor*masks
+
+            invertedMask = ~masks
+            invertedMask = torch.cat((invertedMask,invertedMask,invertedMask),dim=2)
+            newBackgroundvalue = 128
+            
+            MaskedImage[invertedMask] = newBackgroundvalue
+            
+            Cropped_masks = MaskedImage[x[1]:x[3],x[0]:x[2]]
+            
+            #resize the cropped image
+            tensor_np = Cropped_masks.detach().cpu().numpy()
+            resized_image = cv2.resize(tensor_np, (256, 256)) 
+            data = torch.tensor(resized_image)
+            
+
+
     
         # get piece category
         piece_category = self.categories.iloc[self.annotations.iloc[index]['category_id']]['name']
         if self.classifier.lower() in ['bw']:
             encoding = {'black':0,'white':1}
             label = encoding[piece_category.split('-')[0]] # 1st parth of the category is the color
-        elif self.classifier.lower() in ['p','pt']:
-            encoding = {'pawn':0, 'rook':1, 'knight':2, 'bishop':3, 'queen':4, 'king':5, 'empty':6}
+        elif self.classifier.lower() in ['pt']:
+            encoding = {'pawn':0, 'rook':1, 'knight':2, 'bishop':3, 'queen':4, 'king':5}
             label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type
         elif self.classifier.lower() in ['pb']:
             encoding = {'pawn':0, 'rook':1, 'knight':1, 'bishop':1, 'queen':1, 'king':1, 'empty':1}
-            label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type
+            label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type    
         elif self.classifier.lower() in ['loc','locator']:
             label = self.annotations.iloc[index]['chessboard_position'] # get the piece location
             ### Add implementation for translating location to number for learning...
