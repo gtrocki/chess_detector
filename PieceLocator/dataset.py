@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from pathlib import Path
 from torch.utils.data import Dataset
 from segment_anything import sam_model_registry, SamPredictor # import relevant parts of the SAM model
+
 #import matplotlib.pyplot as plt
 class SamDataset(Dataset):
     def __init__(self, dataroot='chessReD', classifier='bw', crop=True, split='train', imres=[1024,1024], withbbox=True):
@@ -80,6 +81,13 @@ class SamDataset(Dataset):
         bbox[2] = bbox[2] * x_factor
         bbox[3] = bbox[3] * y_factor
         return [bbox[0],bbox[1],bbox[0]+bbox[2],bbox[1]+bbox[3]]
+
+    def position_to_int(self,position):
+        # Converts chess board positions to integers
+        file_map = {'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5, 'f': 6, 'g': 7, 'h': 8}
+        rank = int(position[1])
+        file = file_map[position[0]]
+        return (rank - 1) * 8 + (file - 1)
         
     def __len__(self):
         return len(self.annotations)
@@ -136,22 +144,50 @@ class SamDataset(Dataset):
             x = bbox.int()
             imageTensor = torch.tensor(image).to(self.device)
             h, w = masks.shape[-2:]
-            masks = masks.reshape(h, w, 1).to(self.device)
+            masks = masks.reshape(h, w, 1)
             
-            MaskedImage = imageTensor*masks
+            
 
-            invertedMask = ~masks
-            invertedMask = torch.cat((invertedMask,invertedMask,invertedMask),dim=2)
-            newBackgroundvalue = 128
+            if self.classifier != 'loc':
+                MaskedImage = imageTensor*masks
+                invertedMask = ~masks
+                invertedMask = torch.cat((invertedMask,invertedMask,invertedMask),dim=2)
+                newBackgroundvalue = 128
+                MaskedImage[invertedMask] = newBackgroundvalue
+                Cropped_masks = MaskedImage[x[1]:x[3],x[0]:x[2]]
+                #resize the cropped image
+                tensor_np = Cropped_masks.numpy()
+                resized_image = cv2.resize(tensor_np, (256, 256)) 
+                data = torch.tensor(resized_image)
+            else:
+                channel_index = 2 # Choose the blue channel.
+                channel_index2 = 1
+                invertedMask = ~masks
+
+                # Split the image tensor into a list of individual channels.
+                channels = list(torch.chunk(imageTensor, dim=2, chunks=imageTensor.size(1)))
+
+                # Apply the mask to the blue channel.
+                newBackgroundvalue = 128
+                masked_channel = channels[2]
+                masked_channel2 = channels[1]
+                masked_channel[invertedMask] = newBackgroundvalue
+                masked_channel2[invertedMask] = newBackgroundvalue
+
+                # Replace the masked channel in the list of channels.
+                channels[channel_index] = masked_channel
+                channels[channel_index2] = masked_channel2
+
+                # Concatenate the channels back into a single tensor.
+                masked_image_tensor = torch.cat(channels, dim=2)
+                
+                #resize the image.
+                tensor_np = masked_image_tensor.cpu().numpy()
+                resized_image = cv2.resize(tensor_np, (224, 224)) 
+                data = torch.tensor(resized_image).to(self.device)
+        
+        
             
-            MaskedImage[invertedMask] = newBackgroundvalue
-            
-            Cropped_masks = MaskedImage[x[1]:x[3],x[0]:x[2]]
-            
-            #resize the cropped image
-            tensor_np = Cropped_masks.detach().cpu().numpy()
-            resized_image = cv2.resize(tensor_np, (256, 256)) 
-            data = torch.tensor(resized_image)
             
 
 
@@ -161,15 +197,15 @@ class SamDataset(Dataset):
         if self.classifier.lower() in ['bw']:
             encoding = {'black':0,'white':1}
             label = encoding[piece_category.split('-')[0]] # 1st parth of the category is the color
-        elif self.classifier.lower() in ['pt']:
-            encoding = {'pawn':0, 'rook':1, 'knight':2, 'bishop':3, 'queen':4, 'king':5}
+        elif self.classifier.lower() in ['p','pt']:
+            encoding = {'pawn':0, 'rook':1, 'knight':2, 'bishop':3, 'queen':4, 'king':5, 'empty':6}
             label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type
         elif self.classifier.lower() in ['pb']:
             encoding = {'pawn':0, 'rook':1, 'knight':1, 'bishop':1, 'queen':1, 'king':1, 'empty':1}
             label = encoding[piece_category.split('-')[-1]] # 2nd part of the category is the piece type    
         elif self.classifier.lower() in ['loc','locator']:
             label = self.annotations.iloc[index]['chessboard_position'] # get the piece location
-            ### Add implementation for translating location to number for learning...
+            label = self.position_to_int(label)
         else:
             raise(NotImplementedError(f"Classifier '{self.classifier}' not implemented"))
 
